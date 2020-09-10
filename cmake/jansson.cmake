@@ -23,7 +23,6 @@ endif()
 if(FLB_SMALL)
 ExternalProject_Add(jansson
   BUILD_IN_SOURCE TRUE
-  EXCLUDE_FROM_ALL TRUE
   SOURCE_DIR ${JANSSON_SRC}
   INSTALL_DIR ${JANSSON_DEST}
   #CONFIGURE_COMMAND ./configure ${AUTOCONF_HOST_OPT} --with-pic --disable-shared --enable-static --prefix=${JANSSON_DEST}
@@ -34,7 +33,6 @@ ExternalProject_Add(jansson
 else()
 ExternalProject_Add(jansson
   BUILD_IN_SOURCE TRUE
-  EXCLUDE_FROM_ALL TRUE
   SOURCE_DIR ${JANSSON_SRC}
   INSTALL_DIR ${JANSSON_DEST}
   #CONFIGURE_COMMAND ./configure ${AUTOCONF_HOST_OPT} --with-pic --disable-shared --enable-static --prefix=${JANSSON_DEST}
@@ -49,7 +47,6 @@ endif()
 if(MSVC)
   ExternalProject_Add(jansson-windows
     BUILD_IN_SOURCE TRUE
-    EXCLUDE_FROM_ALL TRUE
     SOURCE_DIR ${JANSSON_SRC}
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E copy win32/Makefile win32/config.h ${JANSSON_SRC}
     BUILD_COMMAND nmake ARCH=${JANSSON_ARCH}
