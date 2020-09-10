@@ -353,7 +353,9 @@ add_subdirectory(${FLB_PATH_LIB_MINIZ} EXCLUDE_FROM_ALL)
 
 # Avro
 if(FLB_AVRO_ENCODER)
-  add_subdirectory(${FLB_PATH_LIB_AVRO} EXCLUDE_FROM_ALL)
+  #comment this out for PR1
+  #it will be added back in when avro is added in PR2
+  #add_subdirectory(${FLB_PATH_LIB_AVRO} EXCLUDE_FROM_ALL)
   # jansson
   include(cmake/jansson.cmake)
 endif()
