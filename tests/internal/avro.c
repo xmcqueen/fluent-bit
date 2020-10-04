@@ -280,9 +280,8 @@ void test_msgpack2avro()
     /* deserialize the buffer into msgpack_object instance. */
     /* deserialized object is valid during the msgpack_zone instance alive. */
     msgpack_zone_init(&mempool, 2048);
-
     msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
-    
+
     TEST_CHECK((msgpack2avro(&aobject, &deserialized) == FLB_TRUE));
 
     msgpack_zone_destroy(&mempool);
@@ -337,7 +336,7 @@ void test_union_type_sanity()
     flb_info("totalSize:%zu:\n", totalSize);
     // this is key001,2,3,4 and the status field which is the union type
     TEST_CHECK(totalSize == 5);
-    
+
     avro_value_t test_value;
     TEST_CHECK(avro_value_get_by_name(&aobject, "key001", &test_value, NULL) == 0);
 
