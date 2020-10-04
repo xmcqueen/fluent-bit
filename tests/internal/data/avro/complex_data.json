@@ -1,0 +1,28 @@
+{
+    "kind": "Event",
+    "apiVersion": "audit.k8s.io/v1",
+    "level": "Metadata",
+    "auditID": "468b10e6-b371-4be2-8813-c1bcaf1c4b7c",
+    "stage": "RequestReceived",
+    "requestURI": "/api/v1/namespaces/kube-system/endpoints/kube-scheduler?timeout=10s",
+    "verb": "get",
+    "user": {
+      "username": "system:unsecured",
+      "groups": [
+        "system:masters",
+        "system:authenticated"
+      ]
+    },
+    "sourceIPs": [
+      "127.0.0.1"
+    ],
+    "userAgent": "kube-scheduler/v1.17.6 (linux/amd64) kubernetes/d32e40e/leader-election",
+    "objectRef": {
+      "resource": "endpoints",
+      "namespace": "kube-system",
+      "name": "kube-scheduler",
+      "apiVersion": "v1"
+    },
+    "requestReceivedTimestamp": "2020-09-28T22:23:47.912705Z",
+    "stageTimestamp": "2020-09-28T22:23:47.912705Z"
+  }

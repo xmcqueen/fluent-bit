@@ -89,7 +89,8 @@ int msgpack2avro(avro_value_t *val, msgpack_object *o)
         ret = do_avro(avro_value_set_int(val, o->via.u64), "failed on posint");
 #else
         if (o.via.u64 > ULONG_MAX)
-            flb_warn("over 4294967295");
+            flb_warn("over \"%lu\"", ULONG_MAX);
+            ret = do_avro(avro_value_set_int(val, ULONG_MAX), "failed on posint");
         else
             flb_debug("got a posint: %lu\n", (unsigned long)o->via.u64);
             ret = do_avro(avro_value_set_int(val, o->via.u64), "failed on posint");
@@ -103,9 +104,11 @@ int msgpack2avro(avro_value_t *val, msgpack_object *o)
         ret = do_avro(avro_value_set_int(val, o->via.i64), "failed on negint");
 #else
         if (o->via.i64 > LONG_MAX)
-            flb_warn("over +2147483647");
+            flb_warn("over +\"%ld\"", LONG_MAX);
+            ret = do_avro(avro_value_set_int(val, LONG_MAX), "failed on negint");
         else if (o->via.i64 < LONG_MIN)
-            flb_warn("under -2147483648");
+            flb_warn("under -\"%ld\"", LONG_MIN);
+            ret = do_avro(avro_value_set_int(val, LONG_MIN), "failed on negint");
         else
             flb_debug("got a negint: %ld\n", (signed long)o->via.i64);
             ret = do_avro(avro_value_set_int(val, o->via.i64), "failed on negint");
@@ -180,7 +183,10 @@ int msgpack2avro(avro_value_t *val, msgpack_object *o)
 
             for(; p < pend; ++p) {
                 avro_value_t  element;
-
+                if (p->key.type != MSGPACK_OBJECT_STR) {
+                    flb_debug("the key of in a map must be string.\n");
+                    continue;
+                }
                 flb_sds_t key = flb_sds_create_len(p->key.via.str.ptr, p->key.via.str.size);
                 flb_debug("got key:%s:\n", key);
 
@@ -189,8 +195,6 @@ int msgpack2avro(avro_value_t *val, msgpack_object *o)
                     flb_sds_destroy(key);
                     continue;
                 }
-                flb_debug("calling avro_value_add\n");
-
                 // this does not always return 0 for succcess
                 if (avro_value_add(val, key, &element, NULL, NULL) != 0) {
                     flb_debug("avro_value_add:key:%s:avro error:%s:\n", key, avro_strerror());
@@ -198,7 +202,8 @@ int msgpack2avro(avro_value_t *val, msgpack_object *o)
                 flb_debug("added\n");
 
                 flb_debug("calling avro_value_get_by_index\n");
-                if (!do_avro(avro_value_get_by_index(val, i++, &element, NULL), "Cannot get field")) {
+                // if (!do_avro(avro_value_get_by_index(val, i++, &element, NULL), "Cannot get field")) {
+                if (!do_avro(avro_value_get_by_name(val, key, &element, NULL), "Cannot get field")) {
                     flb_sds_destroy(key);
                     goto msg2avro_end;
                 }

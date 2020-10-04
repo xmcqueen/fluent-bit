@@ -4,16 +4,14 @@
 #include <fluent-bit/flb_avro.h>
 #include <fluent-bit/flb_log.h>
 #include <fluent-bit/flb_pack.h>
+#include <msgpack.h>
 
 #include "flb_tests_internal.h"
 
 /* AVRO iteration tests */
 #define AVRO_SINGLE_MAP1 FLB_TESTS_DATA_PATH "/data/avro/json_single_map_001.json"
-#define AVRO_SINGLE_MAPX FLB_TESTS_DATA_PATH "/data/avro/json_single_map_00x.json"
-#define AVRO_REC_REC_MAP FLB_TESTS_DATA_PATH "/data/avro/map_in_record_in_record.json"
-#define AVRO_LIST_REC_REC_MAP FLB_TESTS_DATA_PATH "/data/avro/map_in_record_in_record_in_list.json"
-#define AVRO_TIGHT_SCHEMA FLB_TESTS_DATA_PATH "/data/avro/tight_schema.json"
 #define AVRO_MULTILINE_JSON FLB_TESTS_DATA_PATH "/data/avro/live-sample.json"
+#define COMPLEX_STRUCT FLB_TESTS_DATA_PATH "/data/avro/complex_schema.json"
 
 const char  JSON_SINGLE_MAP_001_SCHEMA[] =
 "{\"type\":\"record\",\
@@ -25,8 +23,6 @@ const char  JSON_SINGLE_MAP_001_SCHEMA[] =
      {\"name\": \"key004\", \"type\":\
         {\"type\": \"array\", \"items\":\
              {\"type\": \"map\",\"values\": \"int\"}}}]}";
-
-const char QQQ[] = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
 
 /* Unpack msgpack per avro schema */
 void test_unpack_to_avro()
@@ -146,108 +142,157 @@ void test_unpack_to_avro()
     flb_free(out_buf);
 }
 
-void test_parse_tight_schema()
+void test_parse_reordered_schema()
 {
-    int root_type;
-    size_t len;
-    char *out_buf;
-    size_t out_size;
+    // test same schema but different order of fields
+    const char *ts1 = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
+    const char *ts2 = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
+    const char *ts3 = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"newnovalue\",\"type\":\"string\"},{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
 
-    avro_value_t  aobject;
+    const char *schemas[] = {ts1, ts2, ts3, NULL};
 
-    avro_value_iface_t  *aclass = NULL;
-    avro_schema_t aschema;
+    int i=0;
+    for (i=0; schemas[i] != NULL ; i++) {
+        int root_type;
+        size_t len;
+        char *out_buf;
+        size_t out_size;
 
-    aclass = flb_avro_init(&aobject, (char *)QQQ, strlen(QQQ), &aschema);
-    TEST_CHECK(aclass != NULL);
+        avro_value_t  aobject;
 
-    // get the json
-    char *data = mk_file_to_buffer(AVRO_MULTILINE_JSON);
-    TEST_CHECK(data != NULL);
+        avro_value_iface_t  *aclass = NULL;
+        avro_schema_t aschema;
 
-    len = strlen(data);
+        aclass = flb_avro_init(&aobject, (char *)schemas[i], strlen(schemas[i]), &aschema);
+        TEST_CHECK(aclass != NULL);
 
-    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
+        // get the json
+        char *data = mk_file_to_buffer(AVRO_MULTILINE_JSON);
+        TEST_CHECK(data != NULL);
 
-    msgpack_unpacked msg;
-    msgpack_unpacked_init(&msg);
-    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+        len = strlen(data);
 
-    msgpack_object_print(stderr, msg.data);
+        TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
 
-    flb_msgpack_to_avro(&aobject, &msg.data);
+        msgpack_unpacked msg;
+        msgpack_unpacked_init(&msg);
+        TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
 
-    avro_value_t log0;
-    TEST_CHECK(avro_value_get_by_name(&aobject, "log", &log0, NULL) == 0);
+        msgpack_object_print(stderr, msg.data);
 
-    size_t size1 = 0;
-    const char  *log_line = NULL;
-    TEST_CHECK(avro_value_get_string(&log0, &log_line, &size1) == 0);
-    char *pre = "2020-08-21T15:49:48.154291375Z";
-    TEST_CHECK((strncmp(pre, log_line, strlen(pre)) == 0));
-    flb_info("log_line len:%zu:\n", strlen(log_line));
+        flb_msgpack_to_avro(&aobject, &msg.data);
 
-    avro_value_t kubernetes0;
-    TEST_CHECK(avro_value_get_by_name(&aobject, "kubernetes", &kubernetes0, NULL) == 0);
+        avro_value_t log0;
+        TEST_CHECK(avro_value_get_by_name(&aobject, "log", &log0, NULL) == 0);
 
-    avro_value_get_size(&kubernetes0, &size1);
-    flb_info("asize:%zu:\n", size1);
-    TEST_CHECK(size1 == 10);
+        size_t size1 = 0;
+        const char  *log_line = NULL;
+        TEST_CHECK(avro_value_get_string(&log0, &log_line, &size1) == 0);
+        char *pre = "2020-08-21T15:49:48.154291375Z";
+        TEST_CHECK((strncmp(pre, log_line, strlen(pre)) == 0));
+        flb_info("log_line len:%zu:\n", strlen(log_line));
 
-    avro_value_t pn;
-    TEST_CHECK(avro_value_get_by_name(&kubernetes0, "pod_name", &pn, NULL) == 0);
+        avro_value_t kubernetes0;
+        TEST_CHECK(avro_value_get_by_name(&aobject, "kubernetes", &kubernetes0, NULL) == 0);
 
-    const char *pod_name = NULL;
-    size_t pod_name_size = 0;
-    TEST_CHECK(avro_value_get_string(&pn, &pod_name, &pod_name_size) == 0);
-    TEST_CHECK(strcmp(pod_name, "yali-bert-completion-tensorboard-6786c9c8-wj25m") == 0);
-    TEST_CHECK(pod_name[pod_name_size] == '\0');
-    TEST_CHECK(strlen(pod_name) == (pod_name_size-1));
+        avro_value_get_size(&kubernetes0, &size1);
+        flb_info("asize:%zu:\n", size1);
+        TEST_CHECK(size1 == 10);
 
-    avro_value_t nn;
-    TEST_CHECK(avro_value_get_by_name(&kubernetes0, "namespace_name", &nn, NULL) == 0);
+        avro_value_t pn;
+        TEST_CHECK(avro_value_get_by_name(&kubernetes0, "pod_name", &pn, NULL) == 0);
 
-    const char *namespace_name = NULL;
-    size_t namespace_name_size = 0;
-    TEST_CHECK(avro_value_get_string(&nn, &namespace_name, &namespace_name_size) == 0);
-    TEST_CHECK(strcmp(namespace_name, "k8s-pilot") == 0);
+        const char *pod_name = NULL;
+        size_t pod_name_size = 0;
+        TEST_CHECK(avro_value_get_string(&pn, &pod_name, &pod_name_size) == 0);
+        TEST_CHECK(strcmp(pod_name, "yali-bert-completion-tensorboard-6786c9c8-wj25m") == 0);
+        TEST_CHECK(pod_name[pod_name_size] == '\0');
+        TEST_CHECK(strlen(pod_name) == (pod_name_size-1));
 
-    avro_value_t mapX;
-    TEST_CHECK(avro_value_get_by_name(&kubernetes0, "annotations", &mapX, NULL) == 0);
+        avro_value_t nn;
+        TEST_CHECK(avro_value_get_by_name(&kubernetes0, "namespace_name", &nn, NULL) == 0);
 
-    avro_value_get_size(&mapX, &size1);
-    flb_info("asize:%zu:\n", size1);
+        const char *namespace_name = NULL;
+        size_t namespace_name_size = 0;
+        TEST_CHECK(avro_value_get_string(&nn, &namespace_name, &namespace_name_size) == 0);
+        TEST_CHECK(strcmp(namespace_name, "k8s-pilot") == 0);
 
-    TEST_CHECK(size1 == 5);
+        avro_value_t mapX;
+        TEST_CHECK(avro_value_get_by_name(&kubernetes0, "annotations", &mapX, NULL) == 0);
 
-    // check the first item in the map
-    avro_value_t doas;
-    TEST_CHECK(avro_value_get_by_name(&mapX, "doAs", &doas, NULL) == 0);
-    const char *doaser = NULL;
-    size_t doaser_size;
-    TEST_CHECK(avro_value_get_string(&doas, &doaser, &doaser_size) == 0);
-    TEST_CHECK((strcmp(doaser, "stdemb") == 0));
+        avro_value_get_size(&mapX, &size1);
+        flb_info("asize:%zu:\n", size1);
 
-    // check the second item in the map
-    avro_value_t iddecorator;
-    TEST_CHECK(avro_value_get_by_name(&mapX, "iddecorator.grid.li.username", &iddecorator, NULL) == 0);
-    const char *idder = NULL;
-    size_t idder_size;
-    TEST_CHECK(avro_value_get_string(&iddecorator, &idder, &idder_size) == 0);
-    TEST_CHECK((strcmp(idder, "yali") == 0));
+        TEST_CHECK(size1 == 5);
 
-    avro_value_decref(&aobject);
-	avro_value_iface_decref(aclass);
-    avro_schema_decref(aschema);
-    msgpack_unpacked_destroy(&msg);
-    flb_free(data);
-    flb_free(out_buf);
+        // check the first item in the map
+        avro_value_t doas;
+        TEST_CHECK(avro_value_get_by_name(&mapX, "doAs", &doas, NULL) == 0);
+        const char *doaser = NULL;
+        size_t doaser_size;
+        TEST_CHECK(avro_value_get_string(&doas, &doaser, &doaser_size) == 0);
+        TEST_CHECK((strcmp(doaser, "stdemb") == 0));
 
+        // check the second item in the map
+        avro_value_t iddecorator;
+        TEST_CHECK(avro_value_get_by_name(&mapX, "iddecorator.grid.li.username", &iddecorator, NULL) == 0);
+        const char *idder = NULL;
+        size_t idder_size;
+        TEST_CHECK(avro_value_get_string(&iddecorator, &idder, &idder_size) == 0);
+        TEST_CHECK((strcmp(idder, "yali") == 0));
+
+        avro_value_decref(&aobject);
+        avro_value_iface_decref(aclass);
+        avro_schema_decref(aschema);
+        msgpack_unpacked_destroy(&msg);
+        flb_free(data);
+        flb_free(out_buf);
+
+    }
 }
+
+// int msgpack2avro(avro_value_t *val, msgpack_object *o)
+// get a schema for a type like this:
+// http://avro.apache.org/docs/current/api/c/index.html#_examples
+// ../lib/msgpack-3.2.0/include/msgpack/pack.h
+// static int msgpack_pack_nil(msgpack_packer* pk);
+void test_msgpack2avro()
+{
+    avro_value_t  aobject;
+    avro_schema_t schema = avro_schema_null();
+    avro_value_iface_t  *aclass = avro_generic_class_from_schema(schema);
+    avro_generic_value_new(aclass, &aobject);
+
+    msgpack_sbuffer sbuf;
+    msgpack_packer pk;
+    msgpack_zone mempool;
+    msgpack_object deserialized;
+
+    /* msgpack::sbuffer is a simple buffer implementation. */
+    msgpack_sbuffer_init(&sbuf);
+
+    /* serialize values into the buffer using msgpack_sbuffer_write callback function. */
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+
+    msgpack_pack_nil(&pk);
+    TEST_CHECK((FLB_TRUE == FLB_TRUE));
+
+    /* deserialize the buffer into msgpack_object instance. */
+    /* deserialized object is valid during the msgpack_zone instance alive. */
+    msgpack_zone_init(&mempool, 2048);
+
+    msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
+    TEST_CHECK((FLB_TRUE == FLB_TRUE));
+    
+    TEST_CHECK((msgpack2avro(&aobject, &deserialized) == FLB_TRUE));
+
+    msgpack_zone_destroy(&mempool);
+    msgpack_sbuffer_destroy(&sbuf);}
 
 TEST_LIST = {
     /* Avro */
     { "msgpack_to_avro_basic", test_unpack_to_avro},
-    { "avro_tight_schema", test_parse_tight_schema},
+    { "test_parse_reordered_schema", test_parse_reordered_schema},
+    { "test_msgpack2avro", test_msgpack2avro},
     { 0 }
 };

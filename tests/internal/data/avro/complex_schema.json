@@ -1,0 +1,139 @@
+{
+    "type": "record",
+    "name": "kube-audit-logs",
+    "fields": [
+      {
+        "name": "kind",
+        "type": "string"
+      },
+      {
+        "name": "apiVersion",
+        "type": "string"
+      },
+      {
+        "name": "level",
+        "type": "string"
+      },
+      {
+        "name": "auditID",
+        "type": "string"
+      },
+      {
+        "name": "stage",
+        "type": "string"
+      },
+      {
+        "name": "requestURI",
+        "type": "string"
+      },
+      {
+        "name": "verb",
+        "type": "string"
+      },
+      {
+        "name": "user",
+        "type": {
+          "type": "record",
+          "name": "user",
+          "fields": [
+            {
+              "name": "username",
+              "type": "string"
+            },
+            {
+                "name": "uid",
+                "default": null,
+                "type": ["null", "string"]
+            },
+            {
+              "name": "groups",
+              "type": {
+                "type": "array",
+                "items": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "sourceIPs",
+        "type": {
+          "type": "array",
+          "items": "string"
+        }
+      },
+      {
+        "name": "userAgent",
+        "type": "string"
+      },
+      {
+        "name": "objectRef",
+        "default": null,
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values":"string"
+          }
+        ]
+      },
+      {
+        "name": "annotations",
+        "default": null,
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values":"string"
+          }
+        ]
+      },
+      {
+        "name": "responseStatus",
+        "default": null,
+        "type": [
+          "null",
+          {
+            "type": "record",
+            "name": "responseStatus",
+            "fields": [
+              {
+                "name": "metadata",
+                "default": null,
+                "type": [
+                  "null",
+                  {
+                    "type": "record",
+                    "name": "metadata",
+                    "fields": []
+                  }
+                ]
+              },
+              {
+                "name": "code",
+                "type": "long"
+              },
+              {
+                "name": "status",
+                "default": null,
+                "type": ["null", "string"]
+              },
+              {
+                "name": "message",
+                "default": null,
+                "type": ["null", "string"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "requestReceivedTimestamp",
+        "type": "string"
+      },
+      {
+        "name": "stageTimestamp",
+        "type": "string"
+      }
+    ]
+  }
