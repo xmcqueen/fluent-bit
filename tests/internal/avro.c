@@ -282,13 +282,11 @@ void test_msgpack2avro()
     msgpack_zone_init(&mempool, 2048);
 
     msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
-    TEST_CHECK((FLB_TRUE == FLB_TRUE));
     
     TEST_CHECK((msgpack2avro(&aobject, &deserialized) == FLB_TRUE));
 
     msgpack_zone_destroy(&mempool);
     msgpack_sbuffer_destroy(&sbuf);
-    
 }
 const char  JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION[] =
 "{\"type\":\"record\",\
