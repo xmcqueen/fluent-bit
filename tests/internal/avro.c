@@ -1,4 +1,5 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+#include <errno.h>
 #include <string.h>
 #include <fluent-bit/flb_mem.h>
 #include <fluent-bit/flb_avro.h>
@@ -275,7 +276,6 @@ void test_msgpack2avro()
     msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
 
     msgpack_pack_nil(&pk);
-    TEST_CHECK((FLB_TRUE == FLB_TRUE));
 
     /* deserialize the buffer into msgpack_object instance. */
     /* deserialized object is valid during the msgpack_zone instance alive. */
@@ -287,12 +287,181 @@ void test_msgpack2avro()
     TEST_CHECK((msgpack2avro(&aobject, &deserialized) == FLB_TRUE));
 
     msgpack_zone_destroy(&mempool);
-    msgpack_sbuffer_destroy(&sbuf);}
+    msgpack_sbuffer_destroy(&sbuf);
+    
+}
+const char  JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION[] =
+"{\"type\":\"record\",\
+  \"name\":\"Map001\",\
+  \"fields\":[\
+     {\"name\": \"key001\", \"type\": \"int\"},\
+     {\"name\": \"key002\", \"type\": \"float\"},\
+     {\"name\": \"key003\", \"type\": \"string\"},\
+              { \
+                \"name\": \"status\", \
+                \"default\": null, \
+                \"type\": [\"null\", \"string\"] \
+              }, \
+     {\"name\": \"key004\", \"type\":\
+        {\"type\": \"array\", \"items\":\
+             {\"type\": \"map\",\"values\": \"int\"}}}]}";
+void test_union_type_sanity()
+{
+    int root_type;
+    size_t len;
+    char *data;
+    char *out_buf;
+    size_t out_size;
 
+    avro_value_t  aobject;
+    avro_schema_t aschema;
+    avro_value_iface_t  *aclass = NULL;
+
+    aclass = flb_avro_init(&aobject, (char *)JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, strlen(JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION), &aschema);
+    TEST_CHECK(aclass != NULL);
+
+    data = mk_file_to_buffer(AVRO_SINGLE_MAP1);
+    TEST_CHECK(data != NULL);
+
+    len = strlen(data);
+
+    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
+
+    msgpack_unpacked msg;
+    msgpack_unpacked_init(&msg);
+    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+
+    msgpack_object_print(stderr, msg.data);
+    flb_msgpack_to_avro(&aobject, &msg.data);
+
+    size_t totalSize = 0;
+    avro_value_get_size(&aobject, &totalSize);
+    flb_info("totalSize:%zu:\n", totalSize);
+    // this is key001,2,3,4 and the status field which is the union type
+    TEST_CHECK(totalSize == 5);
+    
+    avro_value_t test_value;
+    TEST_CHECK(avro_value_get_by_name(&aobject, "key001", &test_value, NULL) == 0);
+
+    int val001 = 0;
+    avro_value_get_int(&test_value, &val001);
+    TEST_CHECK(val001 == 123456789);
+
+    TEST_CHECK(avro_value_get_by_name(&aobject, "key002", &test_value, NULL) == 0);
+
+    float val002 = 0.0f;
+    // for some reason its rounding to this value
+    float val002_actual = 0.999888f;
+    avro_value_get_float(&test_value, &val002);
+    char str1[80];
+    char str2[80];
+    sprintf(str1, "%f", val002);
+    sprintf(str2, "%f", val002_actual);
+    flb_info("val002:%s:\n", str1);
+    flb_info("val002_actual:%s:\n", str2);
+    TEST_CHECK((strcmp(str1, str2) == 0));
+
+    TEST_CHECK(avro_value_get_by_name(&aobject, "key003", &test_value, NULL) == 0);
+    const char *val003 = NULL;
+    size_t val003_size = 0;
+    TEST_CHECK(avro_value_get_string(&test_value, &val003, &val003_size) == 0);
+    flb_info("val003_size:%zu:\n", val003_size);
+    TEST_CHECK(val003[val003_size] == '\0');
+
+    TEST_CHECK((strcmp(val003, "abcdefghijk") == 0));
+    // avro_value_get_by_name returns ths string length plus the NUL
+    TEST_CHECK(val003_size == 12);
+
+    TEST_CHECK(avro_value_get_by_name(&aobject, "key004", &test_value, NULL) == 0);
+
+    size_t asize = 0;
+    avro_value_get_size(&test_value, &asize);
+    flb_info("asize:%zu:\n", asize);
+
+    TEST_CHECK(asize == 2);
+
+    TEST_CHECK(avro_value_get_by_name(&aobject, "status", &test_value, NULL) == 0);
+
+    avro_value_decref(&aobject);
+	avro_value_iface_decref(aclass);
+    avro_schema_decref(aschema);
+    msgpack_unpacked_destroy(&msg);
+    flb_free(data);
+    flb_free(out_buf);
+
+}
+
+void test_union_type_branches()
+{
+    int root_type;
+    size_t len;
+    char *data;
+    char *out_buf;
+    size_t out_size;
+
+    avro_value_t  aobject;
+    avro_schema_t aschema;
+    avro_value_iface_t  *aclass = NULL;
+
+    aclass = flb_avro_init(&aobject, (char *)JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, strlen(JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION), &aschema);
+    TEST_CHECK(aclass != NULL);
+
+    data = mk_file_to_buffer(AVRO_SINGLE_MAP1);
+    TEST_CHECK(data != NULL);
+
+    len = strlen(data);
+
+    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
+
+    msgpack_unpacked msg;
+    msgpack_unpacked_init(&msg);
+    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+
+    msgpack_object_print(stderr, msg.data);
+    flb_msgpack_to_avro(&aobject, &msg.data);
+
+    avro_value_t test_value;
+
+    TEST_CHECK(avro_value_get_by_name(&aobject, "status", &test_value, NULL) == 0);
+    // avro_type_t  type = avro_value_get_type(test_value);
+    // avro_schema_t
+    // flb_info("type:%d:AVRO_NULL:%d:\n", is_avro_null(type));
+    TEST_CHECK(avro_value_get_type(&test_value) == AVRO_UNION);
+
+    // TEST_CHECK(avro_value_get_null(&test_value) == 0);
+    // int rv = avro_value_get_null(&test_value);
+    // flb_info("rv:%d:EINVAL:%d:\n", rv, EINVAL);
+    // TEST_CHECK(rv == 0);
+
+	// avro_value_t  branch_value;
+    // int rv = avro_value_get_current_branch(&test_value, &branch_value);
+    // flb_info("rv:%d:EINVAL:%d:\n", rv, EINVAL);
+    // TEST_CHECK(rv == 0);
+
+	/* nulls in a union aren't wrapped in a JSON object */
+	// TEST_CHECK(avro_value_get_type(&branch_value) == AVRO_NULL);
+
+	// int  discriminant;
+	// avro_value_get_discriminant(value, &discriminant);
+
+	// avro_schema_t  schema = avro_value_get_schema(value);
+	// avro_schema_t  branch_schema = avro_schema_union_branch(schema, discriminant);
+	// const char  *branch_name = avro_schema_type_name(branch_schema);
+
+    avro_value_decref(&aobject);
+	avro_value_iface_decref(aclass);
+    avro_schema_decref(aschema);
+    msgpack_unpacked_destroy(&msg);
+    flb_free(data);
+    flb_free(out_buf);
+
+}
 TEST_LIST = {
     /* Avro */
     { "msgpack_to_avro_basic", test_unpack_to_avro},
     { "test_parse_reordered_schema", test_parse_reordered_schema},
+    { "test_union_type_sanity", test_union_type_sanity},
+    { "test_union_type_branches", test_union_type_branches},
     { "test_msgpack2avro", test_msgpack2avro},
     { 0 }
 };
