@@ -388,7 +388,7 @@ void test_union_type_sanity()
 
 }
 
-void test_union_type_branches()
+void test_union_type_branchesqq()
 {
     int root_type;
     size_t len;
@@ -425,7 +425,17 @@ void test_union_type_branches()
     // flb_info("type:%d:AVRO_NULL:%d:\n", is_avro_null(type));
     TEST_CHECK(avro_value_get_type(&test_value) == AVRO_UNION);
 
-    // TEST_CHECK(avro_value_get_null(&test_value) == 0);
+    int discriminant = 0;
+    TEST_CHECK(avro_value_get_discriminant(&test_value, &discriminant) == 0);
+    TEST_CHECK(discriminant == -1);
+
+    avro_value_t  branch;
+    TEST_CHECK(avro_value_get_current_branch(&test_value, &branch) != 0);
+
+    TEST_CHECK(avro_value_set_branch(&test_value, 0, &branch) == 0);
+    TEST_CHECK(avro_value_set_null(&branch) == 0);
+
+    TEST_CHECK(avro_value_get_null(&branch) == 0);
     // int rv = avro_value_get_null(&test_value);
     // flb_info("rv:%d:EINVAL:%d:\n", rv, EINVAL);
     // TEST_CHECK(rv == 0);
@@ -453,12 +463,65 @@ void test_union_type_branches()
     flb_free(out_buf);
 
 }
+msgpack_unpacked test_init(avro_value_t *aobject, avro_schema_t *aschema, const char *json_schema, const char *json_data) {
+    char *out_buf;
+    size_t out_size;
+    int root_type;
+
+    avro_value_iface_t  *aclass = flb_avro_init(aobject, (char *)json_schema, strlen(json_schema), aschema);
+    TEST_CHECK(aclass != NULL);
+
+    char *data = mk_file_to_buffer(json_data);
+    TEST_CHECK(data != NULL);
+
+    size_t len = strlen(data);
+
+    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
+
+    msgpack_unpacked msg;
+    msgpack_unpacked_init(&msg);
+    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+
+	avro_value_iface_decref(aclass);
+    flb_free(data);
+    flb_free(out_buf);
+
+    return msg;
+}
+void test_union_type_branches()
+{
+    avro_value_t  aobject;
+    avro_schema_t aschema;
+    
+    msgpack_unpacked mp = test_init(&aobject, &aschema, JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, AVRO_SINGLE_MAP1);
+
+    flb_msgpack_to_avro(&aobject, &mp.data);
+
+    avro_value_t test_value;
+    TEST_CHECK(avro_value_get_by_name(&aobject, "status", &test_value, NULL) == 0);
+    TEST_CHECK(avro_value_get_type(&test_value) == AVRO_UNION);
+
+    int discriminant = 0;
+    TEST_CHECK(avro_value_get_discriminant(&test_value, &discriminant) == 0);
+    TEST_CHECK(discriminant == -1);
+
+    avro_value_t  branch;
+    TEST_CHECK(avro_value_get_current_branch(&test_value, &branch) != 0);
+
+    TEST_CHECK(avro_value_set_branch(&test_value, 0, &branch) == 0);
+    TEST_CHECK(avro_value_set_null(&branch) == 0);
+
+    TEST_CHECK(avro_value_get_null(&branch) == 0);
+
+    avro_value_decref(&aobject);
+    avro_schema_decref(aschema);
+    msgpack_unpacked_destroy(&mp);
+}
 TEST_LIST = {
     /* Avro */
     { "msgpack_to_avro_basic", test_unpack_to_avro},
     { "test_parse_reordered_schema", test_parse_reordered_schema},
     { "test_union_type_sanity", test_union_type_sanity},
     { "test_union_type_branches", test_union_type_branches},
-    { "test_msgpack2avro", test_msgpack2avro},
     { 0 }
 };

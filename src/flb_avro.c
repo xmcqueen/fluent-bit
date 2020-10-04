@@ -241,7 +241,7 @@ msg2avro_end:
  *    - avro_generic_class_from_schema
  *    - avro_generic_value_new 
  * 
- *  or use flb_avro_init for the so do the initialization
+ *  or use flb_avro_init for the initialization
  * 
  *  refer to avro docs
  *     http://avro.apache.org/docs/current/api/c/index.html#_avro_values
@@ -336,7 +336,7 @@ flb_sds_t flb_msgpack_raw_to_avro_sds(const void *in_buf, size_t in_size, struct
     // write the magic byte stuff
     //  write one bye of \0
     //  this is followed by
-    //  16 bytes of the schemaid where the schemaid in hex
+    //  16 bytes of the schemaid where the schemaid is in hex
     //  in this implementation the schemaid is the md5hash of the avro schema
     int rval;
     rval = avro_write(awriter, "\0", 1);
