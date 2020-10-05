@@ -25,26 +25,18 @@ const char  JSON_SINGLE_MAP_001_SCHEMA[] =
         {\"type\": \"array\", \"items\":\
              {\"type\": \"map\",\"values\": \"int\"}}}]}";
 
-/* Unpack msgpack per avro schema */
-void test_unpack_to_avro()
-{
-    int root_type;
-    size_t len;
-    char *data;
+msgpack_unpacked test_init(avro_value_t *aobject, avro_schema_t *aschema, const char *json_schema, const char *json_data) {
     char *out_buf;
     size_t out_size;
+    int root_type;
 
-    avro_value_t  aobject;
-    avro_schema_t aschema;
-    avro_value_iface_t  *aclass = NULL;
-
-    aclass = flb_avro_init(&aobject, (char *)JSON_SINGLE_MAP_001_SCHEMA, strlen(JSON_SINGLE_MAP_001_SCHEMA), &aschema);
+    avro_value_iface_t  *aclass = flb_avro_init(aobject, (char *)json_schema, strlen(json_schema), aschema);
     TEST_CHECK(aclass != NULL);
 
-    data = mk_file_to_buffer(AVRO_SINGLE_MAP1);
+    char *data = mk_file_to_buffer(json_data);
     TEST_CHECK(data != NULL);
 
-    len = strlen(data);
+    size_t len = strlen(data);
 
     TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
 
@@ -52,8 +44,22 @@ void test_unpack_to_avro()
     msgpack_unpacked_init(&msg);
     TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
 
-    msgpack_object_print(stderr, msg.data);
-    flb_msgpack_to_avro(&aobject, &msg.data);
+	avro_value_iface_decref(aclass);
+    flb_free(data);
+    flb_free(out_buf);
+
+    return msg;
+}
+/* Unpack msgpack per avro schema */
+void test_unpack_to_avro()
+{
+    avro_value_t  aobject;
+    avro_schema_t aschema;
+
+    msgpack_unpacked mp = test_init(&aobject, &aschema, JSON_SINGLE_MAP_001_SCHEMA, AVRO_SINGLE_MAP1);
+
+    msgpack_object_print(stderr, mp.data);
+    flb_msgpack_to_avro(&aobject, &mp.data);
 
     avro_value_t test_value;
     TEST_CHECK(avro_value_get_by_name(&aobject, "key001", &test_value, NULL) == 0);
@@ -82,7 +88,6 @@ void test_unpack_to_avro()
     avro_value_get_string(&test_value, &val003, &val003_size);
     flb_info("val003_size:%zu:\n", val003_size);
     TEST_CHECK(val003[val003_size] == '\0');
-
 
     TEST_CHECK((strcmp(val003, "abcdefghijk") == 0));
     // avro_value_get_by_name returns ths string length plus the NUL
@@ -134,13 +139,9 @@ void test_unpack_to_avro()
 
     TEST_CHECK(msize == 2);
 
-
     avro_value_decref(&aobject);
-	avro_value_iface_decref(aclass);
     avro_schema_decref(aschema);
-    msgpack_unpacked_destroy(&msg);
-    flb_free(data);
-    flb_free(out_buf);
+    msgpack_unpacked_destroy(&mp);
 }
 
 void test_parse_reordered_schema()
@@ -150,34 +151,15 @@ void test_parse_reordered_schema()
     const char *ts2 = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
     const char *ts3 = "{\"name\":\"qavrov2_record\",\"type\":\"record\",\"fields\":[{\"name\":\"newnovalue\",\"type\":\"string\"},{\"name\":\"capture\",\"type\":\"string\"},{\"name\":\"log\",\"type\":\"string\"},{\"name\":\"kubernetes\",\"type\":{\"name\":\"krec\",\"type\":\"record\",\"fields\":[{\"name\":\"namespace_name\",\"type\":\"string\"},{\"name\":\"pod_name\",\"type\":\"string\"},{\"name\":\"pod_id\",\"type\":\"string\"},{\"name\":\"annotations\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"labels\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"host\",\"type\":\"string\"},{\"name\":\"container_name\",\"type\":\"string\"},{\"name\":\"docker_id\",\"type\":\"string\"},{\"name\":\"container_hash\",\"type\":\"string\"},{\"name\":\"container_image\",\"type\":\"string\"}]}}]}";
 
-    const char *schemas[] = {ts1, ts2, ts3, NULL};
+    const char *schemas[] = {ts1, ts2, ts3, ts2, ts1, NULL};
 
     int i=0;
     for (i=0; schemas[i] != NULL ; i++) {
-        int root_type;
-        size_t len;
-        char *out_buf;
-        size_t out_size;
 
-        avro_value_t  aobject;
+        avro_value_t  aobject = {0};
+        avro_schema_t aschema = {0};
 
-        avro_value_iface_t  *aclass = NULL;
-        avro_schema_t aschema;
-
-        aclass = flb_avro_init(&aobject, (char *)schemas[i], strlen(schemas[i]), &aschema);
-        TEST_CHECK(aclass != NULL);
-
-        // get the json
-        char *data = mk_file_to_buffer(AVRO_MULTILINE_JSON);
-        TEST_CHECK(data != NULL);
-
-        len = strlen(data);
-
-        TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
-
-        msgpack_unpacked msg;
-        msgpack_unpacked_init(&msg);
-        TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+        msgpack_unpacked msg = test_init(&aobject, &aschema, schemas[i], AVRO_MULTILINE_JSON);
 
         msgpack_object_print(stderr, msg.data);
 
@@ -242,14 +224,11 @@ void test_parse_reordered_schema()
         TEST_CHECK(avro_value_get_string(&iddecorator, &idder, &idder_size) == 0);
         TEST_CHECK((strcmp(idder, "yali") == 0));
 
-        avro_value_decref(&aobject);
-        avro_value_iface_decref(aclass);
         avro_schema_decref(aschema);
         msgpack_unpacked_destroy(&msg);
-        flb_free(data);
-        flb_free(out_buf);
-
+        avro_value_decref(&aobject);
     }
+
 }
 
 // int msgpack2avro(avro_value_t *val, msgpack_object *o)
@@ -304,29 +283,10 @@ const char  JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION[] =
              {\"type\": \"map\",\"values\": \"int\"}}}]}";
 void test_union_type_sanity()
 {
-    int root_type;
-    size_t len;
-    char *data;
-    char *out_buf;
-    size_t out_size;
-
     avro_value_t  aobject;
     avro_schema_t aschema;
-    avro_value_iface_t  *aclass = NULL;
 
-    aclass = flb_avro_init(&aobject, (char *)JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, strlen(JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION), &aschema);
-    TEST_CHECK(aclass != NULL);
-
-    data = mk_file_to_buffer(AVRO_SINGLE_MAP1);
-    TEST_CHECK(data != NULL);
-
-    len = strlen(data);
-
-    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
-
-    msgpack_unpacked msg;
-    msgpack_unpacked_init(&msg);
-    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
+    msgpack_unpacked msg = test_init(&aobject, &aschema, JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, AVRO_SINGLE_MAP1);
 
     msgpack_object_print(stderr, msg.data);
     flb_msgpack_to_avro(&aobject, &msg.data);
@@ -380,114 +340,10 @@ void test_union_type_sanity()
     TEST_CHECK(avro_value_get_by_name(&aobject, "status", &test_value, NULL) == 0);
 
     avro_value_decref(&aobject);
-	avro_value_iface_decref(aclass);
     avro_schema_decref(aschema);
     msgpack_unpacked_destroy(&msg);
-    flb_free(data);
-    flb_free(out_buf);
-
 }
 
-void test_union_type_branchesqq()
-{
-    int root_type;
-    size_t len;
-    char *data;
-    char *out_buf;
-    size_t out_size;
-
-    avro_value_t  aobject;
-    avro_schema_t aschema;
-    avro_value_iface_t  *aclass = NULL;
-
-    aclass = flb_avro_init(&aobject, (char *)JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION, strlen(JSON_SINGLE_MAP_001_SCHEMA_WITH_UNION), &aschema);
-    TEST_CHECK(aclass != NULL);
-
-    data = mk_file_to_buffer(AVRO_SINGLE_MAP1);
-    TEST_CHECK(data != NULL);
-
-    len = strlen(data);
-
-    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
-
-    msgpack_unpacked msg;
-    msgpack_unpacked_init(&msg);
-    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
-
-    msgpack_object_print(stderr, msg.data);
-    flb_msgpack_to_avro(&aobject, &msg.data);
-
-    avro_value_t test_value;
-
-    TEST_CHECK(avro_value_get_by_name(&aobject, "status", &test_value, NULL) == 0);
-    // avro_type_t  type = avro_value_get_type(test_value);
-    // avro_schema_t
-    // flb_info("type:%d:AVRO_NULL:%d:\n", is_avro_null(type));
-    TEST_CHECK(avro_value_get_type(&test_value) == AVRO_UNION);
-
-    int discriminant = 0;
-    TEST_CHECK(avro_value_get_discriminant(&test_value, &discriminant) == 0);
-    TEST_CHECK(discriminant == -1);
-
-    avro_value_t  branch;
-    TEST_CHECK(avro_value_get_current_branch(&test_value, &branch) != 0);
-
-    TEST_CHECK(avro_value_set_branch(&test_value, 0, &branch) == 0);
-    TEST_CHECK(avro_value_set_null(&branch) == 0);
-
-    TEST_CHECK(avro_value_get_null(&branch) == 0);
-    // int rv = avro_value_get_null(&test_value);
-    // flb_info("rv:%d:EINVAL:%d:\n", rv, EINVAL);
-    // TEST_CHECK(rv == 0);
-
-	// avro_value_t  branch_value;
-    // int rv = avro_value_get_current_branch(&test_value, &branch_value);
-    // flb_info("rv:%d:EINVAL:%d:\n", rv, EINVAL);
-    // TEST_CHECK(rv == 0);
-
-	/* nulls in a union aren't wrapped in a JSON object */
-	// TEST_CHECK(avro_value_get_type(&branch_value) == AVRO_NULL);
-
-	// int  discriminant;
-	// avro_value_get_discriminant(value, &discriminant);
-
-	// avro_schema_t  schema = avro_value_get_schema(value);
-	// avro_schema_t  branch_schema = avro_schema_union_branch(schema, discriminant);
-	// const char  *branch_name = avro_schema_type_name(branch_schema);
-
-    avro_value_decref(&aobject);
-	avro_value_iface_decref(aclass);
-    avro_schema_decref(aschema);
-    msgpack_unpacked_destroy(&msg);
-    flb_free(data);
-    flb_free(out_buf);
-
-}
-msgpack_unpacked test_init(avro_value_t *aobject, avro_schema_t *aschema, const char *json_schema, const char *json_data) {
-    char *out_buf;
-    size_t out_size;
-    int root_type;
-
-    avro_value_iface_t  *aclass = flb_avro_init(aobject, (char *)json_schema, strlen(json_schema), aschema);
-    TEST_CHECK(aclass != NULL);
-
-    char *data = mk_file_to_buffer(json_data);
-    TEST_CHECK(data != NULL);
-
-    size_t len = strlen(data);
-
-    TEST_CHECK(flb_pack_json(data, len, &out_buf, &out_size, &root_type) == 0);
-
-    msgpack_unpacked msg;
-    msgpack_unpacked_init(&msg);
-    TEST_CHECK(msgpack_unpack_next(&msg, out_buf, out_size, NULL) == MSGPACK_UNPACK_SUCCESS);
-
-	avro_value_iface_decref(aclass);
-    flb_free(data);
-    flb_free(out_buf);
-
-    return msg;
-}
 void test_union_type_branches()
 {
     avro_value_t  aobject;
